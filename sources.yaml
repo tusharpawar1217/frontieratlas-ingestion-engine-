@@ -1,0 +1,313 @@
+# GraphOne Data Sources Configuration
+# Separate from config.yaml for easier source management
+
+# All sources must be:
+# 1. Publicly accessible (or with documented API key requirements)
+# 2. Compliant with robots.txt and ToS
+# 3. Tested for viability (see docs/source_register.md)
+
+sources:
+  papers:
+    # Semantic Scholar - PRIMARY (Viable ✅)
+    - name: semantic_scholar
+      type: api
+      enabled: true
+      url: "https://api.semanticscholar.org/graph/v1/paper/search"
+      rate_limit: 100  # per 5 minutes
+      params:
+        query: "machine learning OR artificial intelligence OR deep learning"
+        fields: "paperId,title,abstract,authors,year,citationCount,url,externalIds"
+        limit: 100
+      expected_yield: 500+
+      risk: low
+      
+    # arXiv - BLOCKED (need to fix API endpoint and respect robots.txt)
+    - name: arxiv
+      type: api
+      enabled: false  # DISABLED until fixed
+      url: "http://export.arxiv.org/api/query"
+      note: "Blocked by robots.txt - need alternative approach or partnership"
+      categories:
+        - "cs.AI"
+        - "cs.LG"
+        - "cs.CL"
+        - "cs.CV"
+      max_results_per_category: 500
+      expected_yield: 2000
+      risk: high
+      
+    # HuggingFace Papers - Needs implementation
+    - name: huggingface_papers
+      type: web
+      enabled: true
+      url: "https://huggingface.co/papers"
+      use_browser: false
+      expected_yield: 200+
+      risk: medium
+      
+    # Papers with Code - Web scraping fallback
+    - name: paperswithcode
+      type: web
+      enabled: false  # Optional fallback
+      url: "https://paperswithcode.com/latest"
+      use_browser: true
+      expected_yield: 100+
+      risk: medium
+      note: "Site is alive but needs Playwright scraping"
+
+  startups:
+    # HuggingFace Spaces - PRIMARY (Viable ✅)
+    - name: huggingface_spaces
+      type: api
+      enabled: true
+      url: "https://huggingface.co/api/spaces"
+      params:
+        sort: "trending"
+        direction: -1
+        limit: 500
+      expected_yield: 200+
+      risk: low
+      
+    # Y Combinator - BLOCKED (robots.txt)
+    - name: yc_companies
+      type: web
+      enabled: false  # DISABLED - robots.txt blocks API
+      url: "https://www.ycombinator.com/companies"
+      note: "Blocked by robots.txt - consider YC public dataset or partnership"
+      expected_yield: 500+
+      risk: high
+      
+    # Golden (AI company database)
+    - name: golden_ai_companies
+      type: web
+      enabled: false  # Requires research
+      url: "https://golden.com/query/list-of-ai-companies"
+      note: "Alternative source - needs viability check"
+      expected_yield: 300+
+      risk: medium
+      
+    # Crunchbase - Requires paid API
+    - name: crunchbase_public
+      type: api
+      enabled: false
+      note: "Requires API partnership or paid access"
+      risk: high
+
+  products:
+    # GitHub Repos - PRIMARY (Viable ✅)
+    - name: github_repos
+      type: api
+      enabled: true
+      url: "https://api.github.com/search/repositories"
+      search_query: "ai OR machine-learning OR deep-learning stars:>100"
+      sort: "stars"
+      order: "desc"
+      expected_yield: 1000+
+      risk: low
+      note: "Requires GITHUB_TOKEN for higher rate limits"
+      
+    # Product Hunt - UNSTABLE (404)
+    - name: producthunt
+      type: api
+      enabled: false  # DISABLED until API access verified
+      url: "https://api.producthunt.com/v2/api/graphql"
+      note: "API returned 404 - verify endpoint or get API access"
+      expected_yield: 300+
+      risk: high
+      
+    # AlternativeTo
+    - name: alternativeto
+      type: web
+      enabled: false  # Optional
+      url: "https://alternativeto.net/browse/search/?q=ai"
+      use_browser: false
+      expected_yield: 200+
+      risk: medium
+
+  news:
+    # TechCrunch - PRIMARY (Viable ✅)
+    - name: techcrunch
+      type: rss
+      enabled: true
+      rss_url: "https://techcrunch.com/feed/"
+      topics:
+        - "artificial-intelligence"
+        - "startups"
+      expected_yield: 12-20/day
+      fresh_items: 12/20
+      risk: low
+      
+    # MIT Technology Review - SECONDARY (Viable ✅)
+    - name: mit_tech_review
+      type: rss
+      enabled: true
+      rss_url: "https://www.technologyreview.com/feed/"
+      expected_yield: 2-10/day
+      fresh_items: 2/10
+      risk: low
+      
+    # VentureBeat - UNSTABLE (429)
+    - name: venturebeat
+      type: rss
+      enabled: false  # DISABLED - rate limited
+      rss_url: "https://venturebeat.com/feed/"
+      note: "Returns 429 - need slower polling or contact for partnership"
+      expected_yield: 10+/day
+      risk: high
+      
+    # The Verge AI - DEAD (404)
+    - name: theverge_ai
+      type: rss
+      enabled: false  # DISABLED - 404
+      rss_url: "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml"
+      note: "RSS URL returned 404 - may have changed"
+      expected_yield: unknown
+      risk: high
+      
+    # AI News - PARSE FAIL
+    - name: artificialintelligence_news
+      type: rss
+      enabled: false  # DISABLED - 0 entries
+      rss_url: "https://www.artificialintelligence-news.com/feed/"
+      note: "Feed parsed but 0 entries - may be empty or malformed"
+      expected_yield: unknown
+      risk: high
+      
+    # Additional viable sources
+    - name: ars_technica_ai
+      type: rss
+      enabled: true
+      rss_url: "https://feeds.arstechnica.com/arstechnica/technology-lab"
+      expected_yield: 5+/day
+      risk: low
+      
+    - name: wired_ai
+      type: rss
+      enabled: true
+      rss_url: "https://www.wired.com/feed/tag/ai/latest/rss"
+      expected_yield: 5+/day
+      risk: low
+      
+    - name: reuters_technology
+      type: rss
+      enabled: true
+      rss_url: "https://www.reuters.com/technology"
+      expected_yield: 10+/day
+      risk: low
+
+  jobs:
+    # RemoteOK - PRIMARY (Viable ✅)
+    - name: remoteok
+      type: api
+      enabled: true
+      url: "https://remoteok.com/api"
+      params:
+        tag: "ai,ml,python"
+      expected_yield: 100+
+      fresh_items: "ongoing"
+      risk: low
+      
+    # Greenhouse/Lever - NOT STANDALONE
+    - name: greenhouse
+      type: web
+      enabled: false
+      url_pattern: "https://boards.greenhouse.io/{company}/jobs"
+      note: "Requires list of companies - not viable as standalone source"
+      risk: high
+      
+    - name: lever
+      type: web
+      enabled: false
+      url_pattern: "https://jobs.lever.co/{company}"
+      note: "Requires list of companies - not viable as standalone source"
+      risk: high
+      
+    # Remotive - PARSE FAIL
+    - name: remotive
+      type: rss
+      enabled: false  # DISABLED - 0 entries
+      rss_url: "https://remotive.com/api/remote-jobs?category=software-dev"
+      note: "0 entries parsed - inspect feed format"
+      expected_yield: unknown
+      risk: high
+      
+    # Wellfound (AngelList) - ERROR
+    - name: wellfound
+      type: web
+      enabled: false  # DISABLED - parse error
+      url: "https://wellfound.com/role/l/artificial-intelligence"
+      use_browser: true
+      note: "Parse error - needs URL fix"
+      expected_yield: 50+
+      risk: high
+      
+    # Additional viable sources
+    - name: we_work_remotely
+      type: rss
+      enabled: true
+      rss_url: "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+      expected_yield: 20+/day
+      risk: low
+      
+    - name: stackoverflow_jobs
+      type: api
+      enabled: true
+      url: "https://api.stackexchange.com/2.3/jobs"
+      params:
+        site: "stackoverflow"
+        tagged: "machine-learning;python;ai"
+      expected_yield: 30+
+      risk: low
+      note: "Requires Stack Exchange API key"
+      
+    - name: hn_who_is_hiring
+      type: web
+      enabled: false  # Requires custom parser for HN comments
+      url: "https://news.ycombinator.com/item?id={monthly_thread_id}"
+      note: "Hacker News 'Who is Hiring' - monthly thread, needs custom parser"
+      expected_yield: 100+/month
+      risk: medium
+
+# Fallback strategies
+fallbacks:
+  papers:
+    - "If Semantic Scholar rate limited, add arXiv partnership"
+    - "If < 500 papers, add Google Scholar scraping (last resort)"
+    
+  startups:
+    - "If HF Spaces < 200, add Wikidata SPARQL query for AI companies"
+    - "If < 500, add manual curated list from AI Startups Club"
+    
+  products:
+    - "GitHub repos should provide 1000+ easily"
+    - "If needed, add Product Hunt via web scraping"
+    
+  news:
+    - "TechCrunch + MIT TR + new sources should provide 20+/day"
+    - "If < 5 items/day, add Google News RSS (last resort)"
+    
+  jobs:
+    - "RemoteOK + WWR + Stack Overflow should provide 150+/day"
+    - "If < 5 items/day, add aggregator or manual curation"
+
+# Source health monitoring
+monitoring:
+  check_interval_hours: 24
+  alert_thresholds:
+    http_errors: 3  # consecutive failures
+    empty_feeds: 2  # consecutive empty responses
+    rate_limit_hits: 5  # in 1 hour
+  auto_disable_after_failures: 10
+  
+# Compliance notes
+compliance:
+  robots_txt_required: true
+  rate_limit_politeness: true
+  attribution_required: true
+  tos_review_required: true
+  
+# Risk matrix
+risk_levels:
+  low: "Official API, good docs, stable, no ToS issues"
+  medium: "Web scraping, unclear ToS, or requires special handling"
+  high: "Blocked, dead, or requires partnership/payment"

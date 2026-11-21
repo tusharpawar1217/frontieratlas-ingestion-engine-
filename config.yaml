@@ -1,0 +1,276 @@
+# GraphOne Pipeline Configuration
+
+# HTTP Client Settings
+http:
+  timeout: 30  # seconds
+  max_retries: 3
+  retry_backoff_factor: 2.0
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  respect_robots_txt: true
+  conditional_requests: true  # Use ETag/If-Modified-Since
+  
+# Rate Limiting (per domain)
+rate_limiting:
+  default_rpm: 60  # requests per minute
+  default_delay: 1.0  # seconds between requests
+  domain_limits:
+    arxiv.org: 10  # Be very polite to arXiv
+    github.com: 5000  # With token, higher limit
+    api.github.com: 5000
+    huggingface.co: 30
+    producthunt.com: 20
+
+# Concurrency
+concurrency:
+  max_concurrent_requests: 50
+  max_concurrent_per_domain: 5
+  semaphore_limit: 100
+
+# Browser (Playwright)
+browser:
+  headless: true
+  timeout: 45000  # milliseconds
+  wait_until: "networkidle"  # or "domcontentloaded"
+  block_resources:
+    - image
+    - font
+    - media
+  viewport:
+    width: 1920
+    height: 1080
+
+# LLM Configuration
+llm:
+  fallback_chain:
+    - provider: gemini
+      model: gemini-1.5-flash
+      max_tokens: 1000000
+      rpm_limit: 15
+      tpm_limit: 1000000
+      timeout: 30
+    - provider: groq
+      model: llama-3.1-70b-versatile
+      max_tokens: 8000
+      rpm_limit: 30
+      tpm_limit: 14000
+      timeout: 30
+    - provider: deepseek
+      model: deepseek-chat
+      max_tokens: 64000
+      rpm_limit: 60
+      tpm_limit: 1000000
+      timeout: 45
+  
+  # Retry and backoff
+  max_retries_per_provider: 3
+  backoff_base: 2.0
+  backoff_max: 60.0
+  jitter: true
+  
+  # Circuit breaker
+  circuit_breaker:
+    failure_threshold: 5
+    recovery_timeout: 300  # seconds
+    half_open_attempts: 2
+  
+  # Token budgeting
+  reserve_tokens: 500  # Reserve for response
+  chunk_overlap: 200  # tokens
+
+# Grounding Validator
+grounding:
+  enabled: true
+  fuzzy_threshold: 85  # rapidfuzz score
+  required_fields:
+    - entity_name
+    - title
+    - company
+
+# Entity Resolution
+entity_resolution:
+  exact_match_threshold: 100
+  fuzzy_match_threshold: 92
+  space_insensitive: true
+  strip_legal_suffixes: true
+  legal_suffixes:
+    - "Inc"
+    - "Inc."
+    - "LLC"
+    - "Ltd"
+    - "Ltd."
+    - "Corp"
+    - "Corp."
+    - "Corporation"
+    - "GmbH"
+    - "PBC"
+    - "Limited"
+    - "Co."
+    - "Company"
+
+# Date Parsing
+dates:
+  priority_order:
+    - json_ld
+    - opengraph
+    - time_element
+    - rss_pubdate
+    - visible_text
+    - http_header
+  relative_base: utc_now
+  confidence_levels:
+    - high  # From structured metadata
+    - medium  # From visible text parsing
+    - heuristic  # From first-seen tracking
+
+# Freshness Filter (Phase II)
+freshness:
+  news_max_age_hours: 24
+  jobs_max_age_hours: 24
+  use_first_seen_fallback: true
+
+# Data Sources
+sources:
+  papers:
+    - name: arxiv
+      type: api
+      enabled: true
+      url: "http://export.arxiv.org/api/query"
+      categories:
+        - "cs.AI"
+        - "cs.LG"
+        - "cs.CL"
+        - "cs.CV"
+      max_results_per_category: 500
+      sort_by: "submittedDate"
+      sort_order: "descending"
+    
+    - name: huggingface_papers
+      type: web
+      enabled: true
+      url: "https://huggingface.co/papers"
+      use_browser: false
+    
+    - name: semantic_scholar
+      type: api
+      enabled: true
+      url: "https://api.semanticscholar.org/graph/v1"
+      rate_limit: 100  # per 5 minutes
+
+  startups:
+    - name: yc_companies
+      type: api
+      enabled: true
+      url: "https://api.ycombinator.com/v0.1/companies"
+      
+    - name: huggingface_spaces
+      type: api
+      enabled: true
+      url: "https://huggingface.co/api/spaces"
+    
+    - name: crunchbase_public
+      type: web
+      enabled: false  # Requires authentication
+      note: "Add if API access available"
+
+  products:
+    - name: producthunt
+      type: api
+      enabled: true
+      url: "https://api.producthunt.com/v2/api/graphql"
+      note: "Check API access requirements"
+    
+    - name: github_repos
+      type: api
+      enabled: true
+      url: "https://api.github.com"
+      search_query: "ai machine-learning stars:>100"
+
+  news:
+    - name: techcrunch
+      type: rss
+      enabled: true
+      rss_url: "https://techcrunch.com/feed/"
+      topics:
+        - "artificial-intelligence"
+        - "startups"
+    
+    - name: venturebeat
+      type: rss
+      enabled: true
+      rss_url: "https://venturebeat.com/feed/"
+    
+    - name: artificialintelligence_news
+      type: rss
+      enabled: true
+      rss_url: "https://www.artificialintelligence-news.com/feed/"
+    
+    - name: theverge_ai
+      type: rss
+      enabled: true
+      rss_url: "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml"
+    
+    - name: mit_tech_review
+      type: rss
+      enabled: true
+      rss_url: "https://www.technologyreview.com/feed/"
+
+  jobs:
+    - name: greenhouse
+      type: web
+      enabled: true
+      url_pattern: "https://boards.greenhouse.io/{company}/jobs"
+      note: "Aggregate from known AI companies"
+    
+    - name: lever
+      type: web
+      enabled: true
+      url_pattern: "https://jobs.lever.co/{company}"
+    
+    - name: remoteok
+      type: api
+      enabled: true
+      url: "https://remoteok.com/api"
+    
+    - name: remotive
+      type: rss
+      enabled: true
+      rss_url: "https://remotive.com/api/remote-jobs?category=software-dev"
+    
+    - name: wellfound
+      type: web
+      enabled: true
+      url: "https://wellfound.com/role/l/artificial-intelligence"
+      use_browser: true
+
+# Storage
+storage:
+  database: sqlite
+  path: "data/graphone.db"
+  backup_enabled: true
+  checkpoint_interval: 100  # records
+
+# Export
+export:
+  formats:
+    - csv
+    - google_sheets
+  google_sheets:
+    create_new: true
+    make_public: true
+    batch_size: 1000
+  csv_output_dir: "data/output"
+
+# Logging
+logging:
+  level: INFO
+  format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+  file: "logs/graphone.log"
+  rotation: "100 MB"
+  retention: "10 days"
+  colorize: true
+
+# Schema Version
+schema_version: "1.0"
