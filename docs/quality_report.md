@@ -1,6 +1,6 @@
 # GraphOne Pipeline Quality Report
 
-**Generated**: 2026-11-21 10:14:54 UTC
+**Generated**: 2026-11-21 11:03:39 UTC
 **Pipeline Version**: v2 (Evidence-Based Grounding)
 
 ---
