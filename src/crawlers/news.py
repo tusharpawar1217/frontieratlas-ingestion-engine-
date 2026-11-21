@@ -33,6 +33,10 @@ from src.models import (
     ProvenanceMetadata,
     create_metadata_with_provenance,
 )
+from src.frontier import URLFrontier, Priority
+from src.ratelimit import AdaptiveRateLimiter
+from src.cache import ContentCache
+from src.chaos import CompositeHTTPClient
 
 
 class NewsCrawler:
@@ -47,14 +51,41 @@ class NewsCrawler:
         seen_tracker: SeenTracker,
         storage,
         browser_fetcher: Optional[BrowserFetcher] = None,
+        frontier: Optional[URLFrontier] = None,
+        rate_limiter: Optional[AdaptiveRateLimiter] = None,
+        cache: Optional[ContentCache] = None,
     ):
-        self.http_client = http_client
+        self.base_http_client = http_client
         self.seen_tracker = seen_tracker
         self.storage = storage
         self.browser_fetcher = browser_fetcher
         self.config = get_config()
         self.date_extractor = DateExtractor()
         self.freshness_filter = FreshnessFilter()
+        
+        # Core components
+        self.frontier = frontier or URLFrontier()
+        self.rate_limiter = rate_limiter or AdaptiveRateLimiter(
+            default_rate=2.0,  # 2 req/s default (respectful for news sites)
+            default_burst=5,
+        )
+        self.cache = cache or ContentCache(max_size=10_000)
+        
+        # Set custom rate limits for known news sources
+        self.rate_limiter.set_domain_limit("techcrunch.com", rate=1.0, burst=3)
+        self.rate_limiter.set_domain_limit("theverge.com", rate=1.0, burst=3)
+        self.rate_limiter.set_domain_limit("arstechnica.com", rate=1.0, burst=3)
+        self.rate_limiter.set_domain_limit("news.ycombinator.com", rate=2.0, burst=5)
+        
+        # Wrap HTTP client with composite (rate limiting + caching)
+        self.http_client = CompositeHTTPClient(
+            http_client=self.base_http_client,
+            rate_limiter=self.rate_limiter,
+            content_cache=self.cache,
+            chaos_injector=None,  # Disable chaos in production
+        )
+        
+        logger.info("NewsCrawler initialized with core components (frontier, rate limiting, cache)")
     
     async def crawl_all(self) -> Dict[str, int]:
         """
@@ -119,8 +150,15 @@ class NewsCrawler:
             # v2: Track fetch time
             rss_fetched_at = datetime.now(timezone.utc)
             
-            # Fetch RSS feed
-            status, content, headers = await self.http_client.fetch(rss_url)
+            # Fetch RSS feed with rate limiting + caching
+            status, content, headers, metadata = await self.http_client.fetch(
+                url=rss_url,
+                vertical="news",
+                use_cache=True,
+            )
+            
+            if metadata.get('from_cache'):
+                logger.debug(f"RSS feed served from cache (freshness: {metadata.get('freshness_percent', 0):.1f}%)")
             
             if status != 200 or not content:
                 logger.warning(f"Failed to fetch RSS feed: {status}")
@@ -305,8 +343,12 @@ class NewsCrawler:
             Date result tuple or None
         """
         try:
-            # Fetch article
-            status, content, headers = await self.http_client.fetch(url)
+            # Fetch article with rate limiting + caching
+            status, content, headers, metadata = await self.http_client.fetch(
+                url=url,
+                vertical="news",
+                use_cache=True,
+            )
             
             if status != 200 or not content:
                 return None
@@ -343,8 +385,12 @@ class NewsCrawler:
             # v2: Track fetch
             fetched_at = datetime.now(timezone.utc)
             
-            # Try HTTP first
-            status, content, headers = await self.http_client.fetch(url)
+            # Try HTTP first with rate limiting + caching
+            status, content, headers, metadata = await self.http_client.fetch(
+                url=url,
+                vertical="news",
+                use_cache=True,
+            )
             
             if status == 200 and content:
                 # v2: Calculate content hash

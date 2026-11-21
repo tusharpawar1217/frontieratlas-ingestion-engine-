@@ -30,17 +30,52 @@ from src.models import (
     ProvenanceMetadata,
     create_metadata_with_provenance,
 )
+from src.frontier import URLFrontier, Priority
+from src.ratelimit import AdaptiveRateLimiter
+from src.cache import ContentCache
+from src.chaos import CompositeHTTPClient
 
 
 class PapersCrawler:
-    """Crawler for research papers from multiple sources."""
+    """Crawler for research papers from multiple sources with integrated core components."""
     
-    def __init__(self, http_client: AsyncHttpClient, seen_tracker: SeenTracker, storage):
-        self.http_client = http_client
+    def __init__(
+        self,
+        http_client: AsyncHttpClient,
+        seen_tracker: SeenTracker,
+        storage,
+        frontier: Optional[URLFrontier] = None,
+        rate_limiter: Optional[AdaptiveRateLimiter] = None,
+        cache: Optional[ContentCache] = None,
+    ):
+        self.base_http_client = http_client
         self.seen_tracker = seen_tracker
         self.storage = storage
         self.config = get_config()
         self.env_settings = get_env_settings()
+        
+        # Core components
+        self.frontier = frontier or URLFrontier()
+        self.rate_limiter = rate_limiter or AdaptiveRateLimiter(
+            default_rate=5.0,  # 5 req/s default
+            default_burst=10,
+        )
+        self.cache = cache or ContentCache(max_size=10_000)
+        
+        # Set custom rate limits for known APIs
+        self.rate_limiter.set_domain_limit("export.arxiv.org", rate=3.0, burst=5)
+        self.rate_limiter.set_domain_limit("huggingface.co", rate=5.0, burst=10)
+        self.rate_limiter.set_domain_limit("api.semanticscholar.org", rate=10.0, burst=20)
+        
+        # Wrap HTTP client with composite (rate limiting + caching)
+        self.http_client = CompositeHTTPClient(
+            http_client=self.base_http_client,
+            rate_limiter=self.rate_limiter,
+            content_cache=self.cache,
+            chaos_injector=None,  # Disable chaos in production
+        )
+        
+        logger.info("PapersCrawler initialized with core components (frontier, rate limiting, cache)")
         
         # Initialize GitHub client
         self.github_client = None
@@ -229,9 +264,16 @@ class PapersCrawler:
             
             logger.debug(f"Fetching arXiv batch: start={start}")
             
-            # v2: Track fetch time and status
+            # v2: Track fetch time and status (with rate limiting + caching)
             fetched_at = datetime.now(timezone.utc)
-            status, content, headers = await self.http_client.fetch(url)
+            status, content, headers, fetch_metadata = await self.http_client.fetch(
+                url=url,
+                vertical="papers",
+                use_cache=True,
+            )
+            
+            if fetch_metadata.get('from_cache'):
+                logger.debug(f"arXiv batch served from cache (freshness: {fetch_metadata.get('freshness_percent', 0):.1f}%)")
             
             if status != 200 or not content:
                 logger.warning(f"Failed to fetch arXiv batch: {status}")
