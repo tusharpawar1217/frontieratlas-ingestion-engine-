@@ -279,11 +279,11 @@ def main():
     logger.info("=" * 70 + "\n")
     
     all_data = {
-        "papers": generate_sample_papers(1000),      # 1000 papers
-        "news": generate_sample_news(200),           # 200 news articles  
-        "jobs": generate_sample_jobs(200),           # 200 jobs
-        "startups": generate_sample_startups(1000),  # 1000 startups
-        "products": generate_sample_products(1000),  # 1000 products
+        "papers": generate_sample_papers(5000),      # 5000 papers
+        "news": generate_sample_news(2000),          # 2000 news articles  
+        "jobs": generate_sample_jobs(2000),          # 2000 jobs
+        "startups": generate_sample_startups(5000),  # 5000 startups
+        "products": generate_sample_products(6000),  # 6000 products
     }
     
     # Save as JSON
